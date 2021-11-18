@@ -9,6 +9,7 @@
   "author": "Pieter Ouwerkerk <pieter.ouwerkerk@gmail.com>",
   "license": "MIT",
   "dependencies": {
+    "@prisma/client": "^3.5.0",
     "bluebird": "^3.7.2",
     "got": "^11.8.2",
     "pg-promise": "^10.11.1",
