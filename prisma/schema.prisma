@@ -1,0 +1,31 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:../database.db"
+}
+
+model npm_downloads_count {
+  name         String @unique(map: "sqlite_autoindex_npm_downloads_count_1")
+  downloads    Int
+  retrieved_at String
+}
+
+model npm_install_scripts_checker {
+  check_id    String
+  name        String
+  version     String
+  preinstall  Boolean
+  install     Boolean
+  postinstall Boolean
+  prepublish  Boolean
+  preprepare  Boolean
+  prepare     Boolean
+  postprepare Boolean
+  gyp         Boolean
+  state       String?
+
+  @@id([check_id, name, version])
+}
