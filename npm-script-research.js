@@ -19,7 +19,7 @@ async function summarize()
     const aggregations = await Promise.map(installScriptTypes, async (scriptType) =>
     {
         const query = {
-            where: {},
+            where: { NOT: { state: { equals: 'disabled' } } },
             _count: { name: true },
         };
 
