@@ -1,16 +1,10 @@
 const got = require("got");
 const R = require("ramda");
 const Promise = require("bluebird");
+const moment = require("moment");
 
-const data = require("./data.json");
-
-const { insertNpmDownloadData, getNpmDownloadData } = require("./pg-driver");
-
-function load()
-{
-    const columns = ["name", "version", "preinstall", "install", "postinstall", "prepublish", "preprepare", "prepare", "postprepare", "gyp", "state"];
-    return R.map(row => R.fromPairs(R.zip(columns, row)), data);
-}
+const { PrismaClient } = require("@prisma/client");
+const prisma = new PrismaClient();
 
 const LIMIT = 64;
 
@@ -19,7 +13,13 @@ async function getPackageData(rows)
     const fetchedData = await fetchDataForPackages(rows);
 
     return Promise.map(fetchedData, (record) => {
-        return insertNpmDownloadData(record.package, record.downloads);
+        return prisma.npm_downloads_count.create({
+            data: {
+                name: record.package,
+                downloads: record.downloads,
+                retrieved_at: moment().format("YYYY-MM-DD")
+            },
+        });
     });
 }
 
@@ -51,7 +51,6 @@ async function fetchDataForPackages(rows)
 
     const url = apiEndpoint(R.pluck("name", rows));
 
-    // console.log("url", url);
     const response = await got(url).json();
 
     return R.map(([packageName, data]) => {
@@ -62,47 +61,48 @@ async function fetchDataForPackages(rows)
     }, R.toPairs(response));
 }
 
-async function upsertPackageData(rows)
-{
-    // check if row already exists
-    const result = await getPackageData(rows);
-    await Promise.delay(1000);
-}
-
 async function main()
 {
-    const d = load();
+    const npmDownloads = await prisma.npm_install_scripts_checker.findMany();
+
     let packageGroup = [];
 
-    for (var i = 0; i < d.length; i++)
+    for (var i = 0; i < npmDownloads.length; i++)
     {
-        const row = d[i];
+        const record = npmDownloads[i];
 
-        const existingRow = await getNpmDownloadData(row.name);
+        const existingRow = await prisma.npm_downloads_count.findUnique({
+            where: { name: record.name }
+        });
+
         if (existingRow)
         {
-            console.log(`Found existing record for ${row.name}. Skipping…`);
+            console.log(`Found existing record for ${existingRow.name}. Skipping…`);
             continue;
         }
 
         // scoped package
-        if (row.name.charAt(0) === "@")
+        // https://api.npmjs.org/downloads/point/last-month/@slack/client
+        if (record.name.charAt(0) === "@")
         {
-            await upsertPackageData([row]);
+            await getPackageData([record]);
         }
         else
         {
-            packageGroup.push(row);
+            packageGroup.push(record);
         }
 
+        // for non-scoped packages, we can request data for up to 128 packages at a time.
+        // to be safe, I use a LIMIT of 64
+        // https://api.npmjs.org/downloads/point/last-day/npm,express
         if (packageGroup.length >= LIMIT)
         {
-            await upsertPackageData(packageGroup);
+            await getPackageData(packageGroup);
             packageGroup = [];
         }
     }
 
-    await upsertPackageData(packageGroup);
+    await getPackageData(packageGroup);
 }
 
 function apiEndpoint(packages)
@@ -114,6 +114,3 @@ function apiEndpoint(packages)
 }
 
 main();
-
-// https://api.npmjs.org/downloads/point/last-month/@slack/client
-// https://api.npmjs.org/downloads/point/last-day/npm,express
